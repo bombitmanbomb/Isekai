@@ -1,0 +1,28 @@
+<html>
+  <head></head>
+  <body>
+  oh
+  <script src="http://gimmyit.com/js/easyXDM.min.js"></script>
+
+<script type="text/javascript">// <![CDATA[
+   var pageURL = "http://gimmyit.com/giveaway/intel-i7-7700/";
+   var transport = new easyXDM.Socket({                 
+      remote: pageURL,
+props: {style: {margin: "0 auto"}, scrolling:"no" },
+      container: "iframeContainer",                 
+      onMessage: function(message, origin){                     
+        message = (Number(message)+50);
+        this.container.getElementsByTagName("iframe")[0].style.height = message + "px";
+this.container.getElementsByTagName("iframe")[0].style.width = "100%";}
+});
+// ]]></script>
+<style>
+#iframeContainer iframe {
+text-align: center;
+}
+</style>
+<div id="iframeContainer" style=""></div>
+  
+  </body>
+  
+</html>

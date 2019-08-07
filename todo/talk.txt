@@ -1,0 +1,41 @@
+you dont need to put comments her
+yeah, mind if i try making a ping command
+oh its txt
+do you understand my command structure?
+ill look at it a bit more
+one sec i have a Command Proccessing function
+ok
+Line 927 Server.js
+
+
+
+the other files are for the Web server at https://isekai.glitch.me
+ok
+authorize is a basic token oauth for creating an account
+
+that thing where you typed in a 6 digit code
+im going to change it though
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
