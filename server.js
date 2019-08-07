@@ -12,7 +12,8 @@ const CLIENT_SECRET = process.env.clientSecret
 const Discord = require("discord.js")
 const client = new Discord.Client({
   disableEveryone: true,
-  messageCacheLifetime:10
+  messageCacheLifetime:60,
+  messageSweepInterval:120
 });
 const config = require("./config.json");
 var Filter = require('./filter/badwords.js');
@@ -28,9 +29,40 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({
 	extended: true
 }));
+var statusMessage = 0
 app.get("/ping", (request, response) => {
+  //response.send("Hello Medra")
   response.sendStatus(200);
   userdb.read()
+  var status = "Version " + config.version + " | g.help"
+  switch(statusMessage){
+    case 0:
+    status = "Version " + config.version + " | g.help"
+    break
+    case 1:
+    userdb.read()
+    status = "Current Users: " + userdb.get("users").size().value() + " | g.help"
+    break
+    case 2:
+      db.read()
+    status = "Connected Channels: " + db.get("links").size().value() + " | g.help"
+    break
+    default:
+      banned.read()
+    statusMessage = -1  
+    status = "Banned Users: " + banned.get("bannedUsers").size().value() + " | g.help"
+    break
+  }
+  statusMessage++
+  client.user.setPresence({
+    game: {
+      name: status
+    }
+  })
+  
+  
+  
+  
   let addlist = userdb.get("users").filter({"role": "unregistered"}).value()
   if (addlist.length>0){console.log("Clearing Expired Tokens")}
   for (let i=0;i<addlist.length;i++){
@@ -76,14 +108,16 @@ var translate = require('translate');
 translate.engine = 'yandex';
 translate.key = 'trnsl.1.1.20181221T193920Z.74b4574f7877de0d.b1662dd59cd68fa428a6d312ae3fe51efa23f893';
 const languages = ['az','sq','am','en','ar','hy','af','eu','ba','be','bn','my','bg','bs','cy','hu','vi','ht','gl','nl','mrj','el','ka','gu','da','he','yi','id','ga','it','is','es','kk','kn','ca','ky','zh','ko','km','lo','la','lv','lt','lb','mg','ms','ml','mt','mk','mi','mr','mhr','mn','de','ne','no','pa','pap','fa','pl','pt','ro','ru','ceb','sr','si','sk','sl','sw','su','tg','th','tl','ta','tt','te','tr','udm','uz','uk','ur','fi','fr','hi','hr','cs','sv','gd','et','eo','jv','ja']
-async function translateText(text) {
+async function translateText(text,message,user={}) {
   
+  if (!user.language){user.language = "en"}
   var testText = text  
-    if (RLM) {
-    let language = languages[Math.floor(Math.random() * languages.length)]
-    testText = await translate(text, { to: language});
-      console.log(language,"->",testText)
-      testText = "**__en__**->**__"+language +"__** "+testText 
+    if (user.language!="en") {
+   // let language = languages[Math.floor(Math.random() * languages.length)]
+    
+    testText = await translate(text, {from:user.language, to: "en"});
+      //console.log(language,"->",testText)
+      testText = text+"\n**__"+user.language+"__**->**__en__** "+testText 
     } else {
     testText = false
     }
@@ -174,7 +208,9 @@ app.post('/discordOauth', function(req, res) {
   res.send(JSON.stringify({status:400,dat:dat}))
   }
 });
-
+app.get("/giveaway", function(req,res){
+res.sendFile(path.join(__dirname + '/I7.html'))
+})
 
 
 app.get('/terms', function(req, res) {
@@ -273,8 +309,8 @@ userdb.defaults({
       "ip": "::ffff:127.0.0.1",
       "role": "user",
       "rank":["OWNER","ADMIN","DEFAULT"],
-      "primaryChannel": "525786884589486094",
-      "primaryServer": "382346933626339329",
+      "primaryChannel": "585003572643627018",
+      "primaryServer": "571612136036499466",
       "messages": 0
     },
   ]
@@ -328,7 +364,7 @@ client.on("guildDelete", (guild) => {
         "role": "homeless",
         "expiration":new Date()
       }).write()
-      client.users.get(affectedusermap[i].id).send("Your home doorway was deleted. To set a new home use g.sethome on a network channel. If you no longer have access our home channel is https://discord.gg/QEyr7bx\nTo invite me to your world use the following link: https://isekai.glitch.com")
+      client.users.get(affectedusermap[i].id).send("Your home doorway was deleted. To set a new home use g.sethome on a network channel. If you no longer have access our home channel is https://discord.gg/6y2A4Pk\nTo invite me to your world use the following link: https://isekai.glitch.com")
       userlist += ("\n" + affectedusermap[i].nick + " (<@" + affectedusermap[i].id + ">)")
     }
     let desc = "Affected users: " + affectedusermap.length + userlist
@@ -387,82 +423,6 @@ client.on('ready', () => {
 client.on("error", err => {
   //handle error
 })
-client.on("typingStart", (typ, user) => {
-  try {
-    if (!typ.guild) {
-      return
-    }
-    links = db.get("links").value()
-    if (typ.guild.id === "264445053596991498") {
-      return
-    }
-    if (user.bot) {
-      return
-    }
-    if (links.indexOf(typ.id) === -1) {
-      return
-    }
-    let isBanned = banned.get("bannedUsers").find({
-      id: user.id
-    }).value()
-    if (isBanned !== undefined) {
-      client.channels.get(typ.id).send("<@" + user.id + ">, You are unable to use Isekai [Ban](" + isBanned.reason + ")").then((c) => {
-        c.delete(4000)
-      });
-      return
-    }
-    let usernameOverride = userdb.get("users").find({
-      id: user.id
-    }).value()
-    if (usernameOverride === undefined) {
-      
-      return
-    }
-    if (usernameOverride.role === "homeless") {
-      client.channels.get(typ.id).send("<@" + user.id + ">, You have no home door. Please use g.sethome").then((c) => {
-        c.delete(4000)
-      });
-      return
-    }
-    for (let i = 0; i < links.length; i++) {
-      let chan = client.channels.get(links[i])
-      if (!chan) {
-        return
-      }
-      if (chan.typing) {
-        chan.startTyping()
-      }
-    }
-  } catch (err) {}
-})
-client.on("typingStop", (typ, user) => {
-  try {
-    if (!typ.guild) {
-      return
-    }
-    links = db.get("links").value()
-    if (typ.guild.id === "264445053596991498") {
-      return
-    }
-    if (user.bot) {
-      return
-    }
-    if (links.indexOf(typ.id) === -1) {
-      return
-    }
-    for (let i = 0; i < links.length; i++) {
-      let chan = client.channels.get(links[i])
-      if (!chan) {
-        return
-      }
-      if (chan.typingCount === 1) {
-        client.channels.get(links[i]).stopTyping()
-      }
-    }
-  } catch (err) {
-    console.log(err)
-  }
-})
 /* 
     Removes Channel
 */
@@ -493,12 +453,18 @@ client.on("guildMemberRemove", (guildMember) => {
   } catch (err) {}
 })
 client.on("guildCreate", (guildCreate) => {
-  guildCreate.owner.send("A Connection has been established. To link a channel to the network use `g.init`. The user requires `Administrator` privilages to use this command. This process is irriversable so you should do this in a New Channel. My help command is g.help (Only works in a server not this DM)")
+  guildCreate.owner.send("A Connection has been established. To link a channel to the network `IF the created channel was deleted` use `g.init`. The user requires `Administrator` privilages to use this command. This process is irriversable. A New Channel named `Isekai` has been created and set up for you! My help command is g.help (Only works in a server not this DM)")
   //sendHelp(guildCreate.ownerID)
   if (guildCreate.id === "264445053596991498") {
     return
   }
-  guildCreate.createChannel("Isekai","text").then((channel)=>{channel.send("A Connection has been established. To link this channel to the network use `g.init`. The user requires `Administrator` privilages to use this command.")})
+  guildCreate.createChannel("Isekai","text").then((channel)=>{
+    channel.send("Connecting to Network... The Guild Owner must take steps");
+    let message = {}
+    message.channel = channel
+    init(message,true)
+    channel.send("Connected to the network!")
+   })
   //console.log(guildCreate)
   globalAnnounce(makeEmbed("A connection to the world known as '" + guildCreate.name + "' was found. (Users: "+guildCreate.memberCount+")"))
 })
@@ -506,6 +472,7 @@ client.on("guildCreate", (guildCreate) => {
  *Get User Messages and Handle
  */
 client.on('message', message => {
+  
   //return
   try {
     if (!message.guild) {
@@ -539,7 +506,7 @@ client.on('message', message => {
       return
     }
     if (message.content === "g.init" && message.channel.permissionsFor(message.member).has("ADMINISTRATOR", true)) {
-      init(message)
+      init(message,false)
       message.delete()
       return
     }
@@ -579,6 +546,7 @@ client.on('message', message => {
       return
     } //Ignore this. 
     if (links.indexOf(message.channel.id) !== -1) { /// Was the message sent in an Isekai channel
+      //console.log(message)
       let username = message.author.username
       if (username.replace(/[^\x00-\x7F]/g, "") === "" || username.startsWith("[")) {
         username = intToRGB(hashCode(message.author.tag))
@@ -587,7 +555,7 @@ client.on('message', message => {
         id: message.author.id
       }).value()
       if (!user) {
-        //Define User
+        //Define New User
         user = {
           "id": message.author.id,
           "name": username,
@@ -644,7 +612,7 @@ client.on('message', message => {
         return
                 
       }
-      translateText(String(message.content)).then((fuckedText)=>{
+      translateText(String(message.content),message,user).then((fuckedText)=>{
       for (let i = 0; i < lst.length; i++) {
         Whook(lst[i], message, usernameOverride,message.author.id,user.rank,fuckedText)
       }
@@ -711,6 +679,7 @@ function globalAnnounce(message) {
 */
 function Whook(channelID, message, usernameOverride,fromuserid,roles,fuckedText) {
   try{
+    let avatarURL
   db.read()
   userdb.read()
   let theChannel = client.channels.get(channelID)
@@ -749,23 +718,46 @@ function Whook(channelID, message, usernameOverride,fromuserid,roles,fuckedText)
     }
    
     if (message.author){
-    username = message.author.username
-    if (usernameOverride) {
-      username = usernameOverride
-    }
+      username = message.author.username
+      if (usernameOverride) {
+        username = usernameOverride
+      }
       //RankConfig
-    if (message.author.bot || roles.indexOf("BOT")!=-1) {
-      username = "[BOT] " + username
-    } else if (message.author.id === "174609192340946944") {
-      username = "[Bot Creator] " + username
-    } else if (roles.indexOf("ADMIN")!=-1) {
-      username = "[Admin] " + username
-    } else if (roles.indexOf("MODERATOR")!=-1) {
-      username = "[Mod] " + username
-    } else if (roles.indexOf("EGG")!=-1) {
-      username = "[EGG] " + username
-    }
+     avatarURL = "https://cdn.glitch.com/0a7482ac-9b81-429d-b27a-5a8b05fc0668%2Fdiscordbackground.png?1548617880988" //Default
       
+    
+      
+      
+      
+      
+      
+    
+      /*Texty Box :)
+      ok
+      should prob make a List of Avatars
+      added list down some --ln 905
+      
+      
+      
+      
+      */
+    //Overides
+      if (message.author.bot || roles.indexOf("BOT")!=-1) {
+        username = "[BOT] " + username
+        avatarURL = "https://cdn.glitch.com/0a7482ac-9b81-429d-b27a-5a8b05fc0668%2Fbot.png?1548619665465"
+      } else if (message.author.id === "174609192340946944") {
+        avatarURL = "https://cdn.glitch.com/0a7482ac-9b81-429d-b27a-5a8b05fc0668%2Fowner.png?1548618196207"
+        username = "[Owner] " + username
+      } else if (roles.indexOf("ADMIN")!=-1) {
+        avatarURL = "https://cdn.glitch.com/0a7482ac-9b81-429d-b27a-5a8b05fc0668%2FAdmin.png?1548618970869"
+        username = "[Admin] " + username
+      } else if (roles.indexOf("MODERATOR")!=-1) {
+        avatarURL = "https://cdn.glitch.com/0a7482ac-9b81-429d-b27a-5a8b05fc0668%2FModerator.png?1548618967493"
+        username = "[Mod] " + username
+      } else if (roles.indexOf("EGG")!=-1) {
+        avatarURL = "https://cdn.glitch.com/0a7482ac-9b81-429d-b27a-5a8b05fc0668%2FEGGPFP.png?1548619266497"
+        //username = "[EGG] " + username
+      }
       
     }
     
@@ -813,21 +805,24 @@ function Whook(channelID, message, usernameOverride,fromuserid,roles,fuckedText)
       
       return userstring
     })
-    let avatarURL = "https://www.google.com/imgres?imgurl=https%3A%2F%2Fdiscordapp.com%2Fassets%2Fdd4dbc0016779df1378e7812eabaa04d.png&imgrefurl=https%3A%2F%2Fwww.reddit.com%2Fr%2Fdiscordapp%2Fcomments%2F4ksmrc%2Fis_there_a_way_to_access_the_default_discord_user%2F&docid=s1IK819X0FY3oM&tbnid=17IHLJfVDhhIUM%3A&vet=10ahUKEwiws5ii4O7eAhVRvFkKHTsaAgEQMwhWKAAwAA..i&w=256&h=256&bih=1369&biw=2560&q=default%20discord%20avatar&ved=0ahUKEwiws5ii4O7eAhVRvFkKHTsaAgEQMwhWKAAwAA&iact=mrc&uact=8"
+    //let avatarURL = "https://www.google.com/imgres?imgurl=https%3A%2F%2Fdiscordapp.com%2Fassets%2Fdd4dbc0016779df1378e7812eabaa04d.png&imgrefurl=https%3A%2F%2Fwww.reddit.com%2Fr%2Fdiscordapp%2Fcomments%2F4ksmrc%2Fis_there_a_way_to_access_the_default_discord_user%2F&docid=s1IK819X0FY3oM&tbnid=17IHLJfVDhhIUM%3A&vet=10ahUKEwiws5ii4O7eAhVRvFkKHTsaAgEQMwhWKAAwAA..i&w=256&h=256&bih=1369&biw=2560&q=default%20discord%20avatar&ved=0ahUKEwiws5ii4O7eAhVRvFkKHTsaAgEQMwhWKAAwAA&iact=mrc&uact=8"
+    
+    /*
     if (message.author){
+      //console.log(message.author.id,message.author.avatar);
     avatarURL = "https://cdn.discordapp.com/avatars/"+message.author.id+"/"+message.author.avatar+".webp?size=256"
     } else {
     avatarURL = "https://images.discordapp.net/avatars/497371043292381199/a110680dc454c546bf1a84495951e99b.png?size=256"
     }
-    
+    */
     var content = {
       "username": username,
       "avatarURL": avatarURL
     }
     if (message.attachments){
-    if (message.attachments.first()) {
+      if (message.attachments.first()) {
       content.files = [message.attachments.first().url]
-    }
+      }
     }
     if (message.embeds){
     if (message.embeds[0]) {
@@ -840,7 +835,7 @@ function Whook(channelID, message, usernameOverride,fromuserid,roles,fuckedText)
         let user = userdb.get("users").find({
         "id":fromuserid
         }).value()
-        MSG = "<Message Removed>"
+        MSG = "||"+MSG+"||"
         content.username = "BlacklistedUser "+intToRGB(hashCode(user.nick))
         content.avatarURL = 'https://cdn.glitch.com/0a7482ac-9b81-429d-b27a-5a8b05fc0668%2FScreenshot_6.png?1542217371514'
         if (content.files){
@@ -860,14 +855,32 @@ function Whook(channelID, message, usernameOverride,fromuserid,roles,fuckedText)
   })
   } catch(err) {console.log(err)}
 }
+
+//Avatar List
+const GlobalAvatars = [
+
+]
+
+
+
+
+
+
+
+
+
+
 /**
  * 
  * @param {String} msg message to send
  */
+
 function log(msg) {
   client.channels.get("501668491133452288").send(msg)
 }
 
+//so just put all my commands here?
+//yes, i believe i also have a message.lowercase value to get the commands to not require case but you have it if needed for say text input
 function processCommand(message,user) {
   try{
   if (message.content.toLowerCase().startsWith("g.eval") && message.author.id === "174609192340946944") {
@@ -878,6 +891,28 @@ function processCommand(message,user) {
     }
     return
   }
+  if (message.content==="g.ping"){
+  //DO
+    message.reply("pong").then((pong=>{pong.delete(3000)}))
+
+    //theres also globalAnnounce(), this send a message to Every channel
+    //oh wow
+    //also added makeEmbed(title,text), a Join message is globalAnnounce(makeEmbed(user.nick+" Has joined the Chat."));
+    
+    //would it be helpfull for me to make a avanced embed command like have a list of embed varibles then make them an embed if that makes any scence
+    //makeEmbed accepts a 3rd field for misc data
+    return
+  }  
+  
+  if (message.content.startsWith("g.embed") && user.rank.indexOf("MODERATOR")!=-1){
+    let pram = message.content.slice(8)
+    pram = pram.split(";")    
+    
+    //it dident send the embeded message?
+    message.channel.send(makeEmbed(pram[0], pram[1]))
+    console.log(pram[0]);
+  }
+    
   if (message.content === "g.help") {
     sendHelp(message)
     return
@@ -913,6 +948,7 @@ function processCommand(message,user) {
   if (message.content.startsWith("g.ban") && user.rank.indexOf("ADMIN")!=-1) {
     let t = message.content.slice(6)
     t = t.split(";")
+    //g.ban user;reason
     let tuser = t[0]
     let treason
     if (!t[1]){treason = "Ban"} else {treason = t[1]}
@@ -960,6 +996,9 @@ function processCommand(message,user) {
       "id": message.author.id
     }).value()
     oldNick = oldNick.nick
+    if (oldNick==="!undefined"){
+      return
+    }
     console.log("Username Change", oldNick, "->", nick)
     userdb.get('users').find({
       "id": message.author.id
@@ -1135,7 +1174,7 @@ function DELETE(i) {
   })
 }
 
-function init(message) {
+function init(message,skipDoorway) {
   client.channels.get(message.channel.id).fetchWebhooks().then(hook => {
     let webhook = hook.find(x => x.name === "User")
     if (webhook === null) {
@@ -1149,7 +1188,9 @@ function init(message) {
             title: "A new doorway has opened in '" + tChannel.guild.name + "'"
           }
         }
+        if (!skipDoorway){
         globalAnnounce(embed)
+        }
       }).catch(console.error)
       return
     } else {
@@ -1172,7 +1213,7 @@ function sendHelp(message) {
     "id": message.author.id
   }).value().nick
   let channels = db.get("links").value()
-  let helpmsg = "Welcome to Isekai created by bomb_and_kou#0669. Our main server is  https://discord.gg/SEZ4z3T \nMy Invite Link is https://discordapp.com/oauth2/authorize?client_id=497371043292381199&scope=bot&permissions=805331985\nTo link achannel type `g.init` in the channel to connect. Requires `Server Administrator Permissions`.\nMake sure it is a new channel as this proccess is irreversible currently."
+  let helpmsg = "Welcome to Isekai created by bomb_and_kou#0669. Our main server is  https://discord.gg/6y2A4Pk \nMy Invite Link is https://discordapp.com/oauth2/authorize?client_id=497371043292381199&scope=bot&permissions=805331985\nTo link achannel type `g.init` in the channel to connect. Requires `Server Administrator Permissions`.\nMake sure it is a new channel as this proccess is irreversible currently."
   helpmsg += "\n\n__**RULES**__\nNo Spamming. Users spamming will get Blacklisted.\nNo Profanity. Bypassing the profanity filter will result in being blacklisted.\nDo not send any NSFW media (anything that would typically be labeled “18+” or “Mature Content”)\nRacism, Sexism, Bigotry, Trolling is cause for an immediate ban.\nListen to the staff.\nSerious Offenses can get your entire server blacklisted from our network."
   helpmsg += "\n\n__**HOW TO PING**__ \nYour ping is `@<" + nick + ">`" + "\n@user will not longer work and will be removed from messages. \nInstead wrap the Nickname in <> - @<Nickname>. ex: `Hello @<Bomb & Kou> how are you?`"
   helpmsg += "\nYou will only be pinged on 1 server that you are in.\n\nThe Bot Command Prefix is `" + config.prefix + "`\nMy commands will only work in connected channels below.\n__**Available Commands**__:\n"
